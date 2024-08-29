@@ -19,6 +19,7 @@ In the first round of modifications, we focused on the following key areas to su
 
 4. **Inclusion of Debugging Output**:
    - Added several `println` statements throughout the code to facilitate better tracking and debugging of the program's execution.
+   - At 'ITensor.scala' , 'Product.scala'
 
 5. **Creation of F4 and F8 Fields**:
    - Defined and implemented F4 and F8 fields to support different levels of FFT computations.
