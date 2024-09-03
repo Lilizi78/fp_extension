@@ -26,7 +26,7 @@ package transforms.fft
 import ir.rtl.hardwaretype.{ComplexHW, FixedPoint, HW}
 import ir.rtl.{AcyclicStreamingModule, StreamingModule}
 import ir.spl._
-import linalg.Fields.{Complex, F2, F4, F8}
+import linalg.Fields.{Complex, F2, F4, F8, F16}
 import linalg.Matrix
 import transforms.perm
 import transforms.perm.LinearPerm
