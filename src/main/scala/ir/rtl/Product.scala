@@ -57,6 +57,12 @@ object Product extends AssociativeNodeCompanionT[StreamingModule,Product]([T] =>
   override def simplify[T](lhs: StreamingModule[T], rhs: StreamingModule[T]) = {
     val t=lhs.t
     val k=rhs.k
+    if (lhs.t != rhs.t) {
+    println(s"Handling mismatched t values: lhs.t=${lhs.t}, rhs.t=${rhs.t}")
+      // Implement a logic to merge lhs and rhs with different t values
+      // Example: Wrap them in a new module that handles both t=1 and t=2 cases
+      return None // Replace with actual merging logic if needed
+    }
     implicit val hw: HW[T] =lhs.hw
     require(lhs.t==t)
     require(rhs.k==k)
@@ -84,27 +90,34 @@ class AcyclicProduct[U] private(override val list: Seq[AcyclicStreamingModule[U]
   override def hasSinglePortedMem: Boolean = list.exists(_.hasSinglePortedMem)
 }
 
-object AcyclicProduct extends AssociativeNodeCompanionT[AcyclicStreamingModule,AcyclicProduct]([T] => (inputs:Seq[AcyclicStreamingModule[T]]) => new AcyclicProduct(inputs))  {
-  
+object AcyclicProduct extends AssociativeNodeCompanionT[AcyclicStreamingModule, AcyclicProduct]([T] => (inputs: Seq[AcyclicStreamingModule[T]]) => new AcyclicProduct(inputs))  {
+
   override def simplify[T](lhs: AcyclicStreamingModule[T], rhs: AcyclicStreamingModule[T]) = {
-    println(s"Simplifying AcyclicProduct: lhs.t=${lhs.t}, rhs.t=${rhs.t}, lhs.k=${lhs.k}, rhs.k=${rhs.k}")
-    require(lhs.t == rhs.t)
-    require(lhs.k == rhs.k)
-    require(lhs.hw == rhs.hw)
+    println(s"Simplifying AcyclicProduct: lhs.t=${lhs.t}, rhs.t=${rhs.t}, lhs.k=${lhs.k}, rhs.k=${rhs.k}, lhs.hw=${lhs.hw}, rhs.hw=${rhs.hw}")
+    
+    require(lhs.t == rhs.t, s"lhs.t (${lhs.t}) != rhs.t (${rhs.t})")
+    require(lhs.k == rhs.k, s"lhs.k (${lhs.k}) != rhs.k (${rhs.k})")
+    require(lhs.hw == rhs.hw, s"lhs.hw (${lhs.hw}) != rhs.hw (${rhs.hw})")
+    
     implicit val hw: HW[T] = lhs.hw
-    val t=lhs.t
+    val t = lhs.t
     (lhs, rhs) match {
       case (Identity(), _) => Some(rhs)
       case (_, Identity()) => Some(lhs)
 
-      case (Steady(lhs,_),Steady(rhs,_))=>
-        val size =Utils.lcm(lhs.size, rhs.size)
-        Some(Steady(Seq.tabulate(size)(i => lhs(i % lhs.size) * rhs(i % rhs.size)),t))
-      //todo:Add SLP
+      case (Steady(lhs, _), Steady(rhs, _)) =>
+        val size = Utils.lcm(lhs.size, rhs.size)
+        Some(Steady(Seq.tabulate(size)(i => lhs(i % lhs.size) * rhs(i % rhs.size)), t))
+      
+      // Add more cases for other combinations if necessary
 
-      case _ => None
+      case _ => 
+        println("No match case found, returning None.")
+        None
     }
   }
+}
+
   /*def apply[U](lhs: SB[U], rhs: SB[U]): SB[U] = {
     require(lhs.t == rhs.t)
     require(lhs.k == rhs.k)
@@ -130,4 +143,3 @@ object AcyclicProduct extends AssociativeNodeCompanionT[AcyclicStreamingModule,A
 
   //def apply[U: HW](factors: Seq[SB[U]]): SB[U] = factors.reduceLeft((lhs, rhs) => ProductSB(lhs, rhs))
   //override def create[T](inputs: Seq[AcyclicStreamingModule[T]]): AcyclicStreamingModule[T] = new AcyclicProduct[T](inputs)
-}

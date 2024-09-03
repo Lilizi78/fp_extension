@@ -27,23 +27,66 @@ import ir.rtl.hardwaretype.HW
 import ir.rtl.signals.Sig
 import ir.rtl.{AcyclicStreamingModule, StreamingModule}
 import ir.spl.SPL
-import transforms.fft.{DFT2, DFT4, DFT8}
+import transforms.fft.{DFT2, DFT4, DFT8, DFT16}
 
+/**
+ * Butterfly class for Radix-2 FFT computation.
+ * This class extends an acyclic streaming module for computing the FFT using Radix-2.
+ *
+ * @tparam T The data type for the input signals, parameterized with hardware type.
+ */
 case class Butterfly[T: HW]() extends AcyclicStreamingModule[T](0, 1) {
   override def toString: String = "F2"
 
+  /**
+   * Implements the butterfly operation for Radix-2.
+   *
+   * @param inputs A sequence of input signals.
+   * @return A sequence of output signals after performing the Radix-2 butterfly computation.
+   */
   override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
+    println(s"Butterfly: Implementing with ${inputs.size} inputs.")
+    // Group inputs by 2 and perform addition and subtraction for each pair.
     inputs.grouped(2).toSeq.flatMap(i => Seq(i.head + i.last, i.head - i.last))
   }
 
+  /**
+   * Returns the SPL representation of this module, which in this case is a DFT of size 2.
+   */
   override def spl: SPL[T] = DFT2[T]()(implicitly[HW[T]].num)
 }
 
-case class Butterfly4[T: HW]() extends AcyclicStreamingModule[T](0, 1) {
+/**
+ * Butterfly class for Radix-4 FFT computation.
+ *
+ * @param k Logarithm of the input size (i.e., the streaming width).
+ * @tparam T The data type for the input signals, parameterized with hardware type.
+ */
+case class Butterfly4[T: HW](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
   override def toString: String = "F4"
 
+  /**
+   * Implements the butterfly operation for Radix-4.
+   *
+   * @param inputs A sequence of input signals.
+   * @return A sequence of output signals after performing the Radix-4 butterfly computation.
+   */
   override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
-    inputs.grouped(4).toSeq.flatMap { i =>
+    println(s"Butterfly4: Implementing with ${inputs.size} inputs.")
+    
+    val inputSize = 1 << 2  // Calculate expected input size as 2^2
+
+    // Ensure the number of inputs is a multiple of 2^k; if not, pad with zeros.
+    val paddedInputs = if (inputs.size % inputSize != 0) {
+      println(s"Warning: Input size is not a multiple of $inputSize, padding with zeros. Current size: ${inputs.size}")
+      inputs ++ Seq.fill(inputSize - (inputs.size % inputSize))(inputs.head - inputs.head)  // Padding with zeros
+    } else {
+      inputs
+    }
+
+    // Process input groups based on calculated size
+    paddedInputs.grouped(inputSize).toSeq.flatMap { i =>
+      println(s"Processing group: ${i.mkString(", ")}")
       val sum1 = i(0) + i(1)
       val sum2 = i(2) + i(3)
       val diff1 = i(0) - i(1)
@@ -52,14 +95,45 @@ case class Butterfly4[T: HW]() extends AcyclicStreamingModule[T](0, 1) {
     }
   }
 
+  /**
+   * Returns the SPL representation of this module, which in this case is a DFT of size 4.
+   */
   override def spl: SPL[T] = DFT4[T]()(implicitly[HW[T]].num)
 }
 
-case class Butterfly8[T: HW]() extends AcyclicStreamingModule[T](0, 1) {
+/**
+ * Butterfly class for Radix-8 FFT computation.
+ *
+ * @param k Logarithm of the input size (i.e., the streaming width).
+ * @tparam T The data type for the input signals, parameterized with hardware type.
+ */
+case class Butterfly8[T: HW](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
   override def toString: String = "F8"
 
+  /**
+   * Implements the butterfly operation for Radix-8.
+   *
+   * @param inputs A sequence of input signals.
+   * @return A sequence of output signals after performing the Radix-8 butterfly computation.
+   */
   override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
-    inputs.grouped(8).toSeq.flatMap { i =>
+    println(s"Butterfly8: Implementing with ${inputs.size} inputs.")
+    
+    val inputSize = 1 << 3  // Calculate expected input size as 2^3
+
+    // Ensure the number of inputs is a multiple of inputSize; if not, pad with zeros.
+    val paddedInputs = if (inputs.size % inputSize != 0) {
+      println(s"Warning: Input size is not a multiple of $inputSize, padding with zeros. Current size: ${inputs.size}")
+      inputs ++ Seq.fill(inputSize - (inputs.size % inputSize))(inputs.head - inputs.head)  // Padding with zeros
+    } else {
+      inputs
+    }
+
+    // Process input groups of inputSize
+    paddedInputs.grouped(inputSize).toSeq.flatMap { i =>
+      println(s"Processing group: ${i.mkString(", ")}")
+      
+      // Perform butterfly computation on the group of inputSize
       val sum1 = i(0) + i(4)
       val sum2 = i(1) + i(5)
       val sum3 = i(2) + i(6)
@@ -68,10 +142,81 @@ case class Butterfly8[T: HW]() extends AcyclicStreamingModule[T](0, 1) {
       val diff2 = i(1) - i(5)
       val diff3 = i(2) - i(6)
       val diff4 = i(3) - i(7)
-      Seq(sum1 + sum2, sum3 + sum4, sum1 - sum2, sum3 - sum4,
-        diff1 + diff2, diff3 + diff4, diff1 - diff2, diff3 - diff4)
+      
+      Seq(
+        sum1 + sum2, sum3 + sum4, sum1 - sum2, sum3 - sum4,
+        diff1 + diff2, diff3 + diff4, diff1 - diff2, diff3 - diff4
+      )
     }
   }
 
+  /**
+   * Returns the SPL representation of this module, which in this case is a DFT of size 8.
+   */
   override def spl: SPL[T] = DFT8[T]()(implicitly[HW[T]].num)
+}
+
+/**
+ * Butterfly class for Radix-16 FFT computation.
+ *
+ * @param k Logarithm of the input size (i.e., the streaming width).
+ * @tparam T The data type for the input signals, parameterized with hardware type.
+ */
+case class Butterfly16[T: HW](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
+  override def toString: String = "F16"
+
+  /**
+   * Implements the butterfly operation for Radix-16.
+   *
+   * @param inputs A sequence of input signals.
+   * @return A sequence of output signals after performing the Radix-16 butterfly computation.
+   */
+  override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
+    println(s"Butterfly16: Implementing with ${inputs.size} inputs.")
+    val inputSize = 1 << 4  // Calculate expected input size as 2^4
+    
+    // Ensure the number of inputs is a multiple of inputSize; if not, pad with zeros.
+    val paddedInputs = if (inputs.size % inputSize != 0) {
+      println(s"Warning: Input size is not a multiple of $inputSize, padding with zeros. Current size: ${inputs.size}")
+      inputs ++ Seq.fill(inputSize - (inputs.size % inputSize))(inputs.head - inputs.head)  // Padding with zeros
+    } else {
+      inputs
+    }
+
+    // Process input groups of inputSize
+    paddedInputs.grouped(inputSize).toSeq.flatMap { i =>
+      println(s"Processing group: ${i.mkString(", ")}")
+
+      // Perform butterfly computation on the group of inputSize
+      val sum1 = i(0) + i(8)
+      val sum2 = i(1) + i(9)
+      val sum3 = i(2) + i(10)
+      val sum4 = i(3) + i(11)
+      val sum5 = i(4) + i(12)
+      val sum6 = i(5) + i(13)
+      val sum7 = i(6) + i(14)
+      val sum8 = i(7) + i(15)
+
+      val diff1 = i(0) - i(8)
+      val diff2 = i(1) - i(9)
+      val diff3 = i(2) - i(10)
+      val diff4 = i(3) - i(11)
+      val diff5 = i(4) - i(12)
+      val diff6 = i(5) - i(13)
+      val diff7 = i(6) - i(14)
+      val diff8 = i(7) - i(15)
+
+      Seq(
+        sum1 + sum2, sum3 + sum4, sum5 + sum6, sum7 + sum8,
+        sum1 - sum2, sum3 - sum4, sum5 - sum6, sum7 - sum8,
+        diff1 + diff2, diff3 + diff4, diff5 + diff6, diff7 + diff8,
+        diff1 - diff2, diff3 - diff4, diff5 - diff6, diff7 - diff8
+      )
+    }
+  }
+
+  /**
+   * Returns the SPL representation of this module, which in this case is a DFT of size 16.
+   */
+  override def spl: SPL[T] = DFT16[T]()(implicitly[HW[T]].num)
 }

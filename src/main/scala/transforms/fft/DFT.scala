@@ -32,49 +32,55 @@ import transforms.perm
 import transforms.perm.LinearPerm
 
 object DFT:
-  def Q[T](n: Int, r: Int, l: Int): SPL[T] = 
+
+  def Q[T](n: Int, r: Int, l: Int): SPL[T] = {
     println(s"Function Q: n=$n, r=$r, l=$l")
     val mat1 = Matrix.identity[F2](r * l) oplus LinearPerm.Lmat(n - r * (l + 1), n - r * l)
     val mat2 = Matrix.identity[F2](r * (l + 1)) oplus LinearPerm.Lmat(r, n - r * (l + 1))
     val mat = mat1 * mat2
+    println(s"Generated Matrix for Q: $mat")
     LinearPerm[T](mat)
+  }
 
   def CTDFT(n: Int, r: Int): SPL[Complex[Double]] = {
-      println(s"Function CTDFT: n=$n, r=$r")
-      assert(n % r == 0)
-      if (n == r) {
-          println(s"Terminating recursion at n=$n, r=$r with DFT${1<<r}")
-          r match {
-              case 1 => DFT2()
-              case 2 => DFT4()
-              case 3 => DFT8()
-              // Add more cases for other radices if needed
-              case _ => throw new IllegalArgumentException(s"Unsupported radix: r=$r")
-          }
-          //println(s"~~Terminating recursion at n=$n, r=$r with DFT${r}")
-      } else {
-          println(s"Expanding CTDFT for n=$n, r=$r")
-          LinearPerm(LinearPerm.Lmat(r, n)) * Product(n / r)(l => {
-              println(s"Inside Product loop with l=$l")
-              ITensor(n - r, CTDFT(r, r)) * DiagE(n, r, l) * Q(n, r, l)
-          }) * LinearPerm(LinearPerm.Rmat(r, n))
+    println(s"Function CTDFT: n=$n, r=$r")
+    assert(n % r == 0, s"n ($n) must be divisible by r ($r)")
+    
+    if (n == r) {
+      println(s"Terminating recursion at n=$n, r=$r with DFT${1 << r}")
+
+      r match {
+        case 1 => DFT2()
+        case 2 => DFT4()
+        case 3 => DFT8()
+        case 4 => DFT16()
+        // Add more cases for other radices if needed
+        case _ => throw new IllegalArgumentException(s"Unsupported radix: r=$r")
       }
+    } else {
+      println(s"Expanding CTDFT for n=$n, r=$r")
+      val lmat = LinearPerm.Lmat(r, n)
+      val rmat = LinearPerm.Rmat(r, n)
+      val expandedProduct = Product(n / r)(l => {
+        println(s"Inside Product loop with l=$l, n/r=${n/r}, r=$r")
+        val tensor = ITensor(n - r, CTDFT(r, r))
+        val diag = DiagE(n, r, l)
+        val q = Q[Complex[Double]](n, r, l)
+        println(s"Tensor: $tensor, DiagE: $diag, Q: $q")
+        tensor * diag * q
+      })
+      LinearPerm(lmat) * expandedProduct * LinearPerm(rmat)
+    }
   }
 
 
-  def omega(n: Int, pow: Int): Complex[Double] =
-    //println(s"Function omega: n=$n, pow=$pow") 
-    if pow % (1 << n) == 0 then
-      Complex(1)
-    else if 2 * (pow % (1 << n)) == (1 << n) then
-      Complex(-1)
-    else if 4 * (pow % (1 << n)) == (1 << n) then
-      Complex(0,-1)
-    else if 4 * (pow % (1 << n)) == 3 * (1 << n) then
-      Complex(0,1)
-    else 
-      val angle = -2 * Math.PI * pow / (1 << n)
-      Complex(Math.cos(angle), Math.sin(angle))
+  def omega(n: Int, pow: Int): Complex[Double] = {
+    //println(s"Function omega: n=$n, pow=$pow")
+    val N = 1 << n
+    val angle = -2 * Math.PI * pow / N
+    Complex(Math.cos(angle), Math.sin(angle))
+  }
+
     
   def Pease(n: Int, r: Int): SPL[Complex[Double]] =
     println(s"Function Pease: n=$n, r=$r") 
@@ -84,6 +90,7 @@ object DFT:
         case 1 => DFT2()
         case 2 => DFT4()
         case 3 => DFT8()
+        case 4 => DFT16()
         case _ => throw new IllegalArgumentException(s"Unsupported radix: $r")
       }
     else
@@ -97,6 +104,7 @@ object DFT:
         case 1 => DFT2()
         case 2 => DFT4()
         case 3 => DFT8()
+        case 4 => DFT16()
         case _ => throw new IllegalArgumentException(s"Unsupported radix: $r")
       }
     else
@@ -110,6 +118,7 @@ object DFT:
         case 1 => DFT2()
         case 2 => DFT4()
         case 3 => DFT8()
+        case 4 => DFT16()
         case _ => throw new IllegalArgumentException(s"Unsupported radix: $r")
       }
     else

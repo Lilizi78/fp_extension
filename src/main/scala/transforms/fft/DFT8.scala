@@ -29,9 +29,9 @@ class DFT8[T](implicit val num: Numeric[T])
   override def stream(k: Int, control: RAMControl)(implicit
       hw: HW[T]
   ): AcyclicStreamingModule[T] = {
-    println(s"DFT8 stream method called with k=$k")
-    require(k == 2)
-    Butterfly8[T]()
+    //println(s"DFT8 stream method called with k=$k")
+    //require(k == 2)
+    Butterfly8[T](k)
   }
 }
 
