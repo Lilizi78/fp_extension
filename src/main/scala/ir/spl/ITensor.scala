@@ -50,33 +50,33 @@ case class ITensor[T] private (r: Int, factor: Repeatable[T]) extends SPL[T](fac
  */
 object ITensor:
   def apply[T](r:Int, factor:SPL[T]): SPL[T] = 
-    println(s"ITensor.apply called with r=$r, factor=${factor.getClass.getSimpleName}")
+    //println(s"ITensor.apply called with r=$r, factor=${factor.getClass.getSimpleName}")
     
     if r == 0 then
-      println(s"Returning factor directly because r=0: ${factor.getClass.getSimpleName}")
+      //println(s"Returning factor directly because r=0: ${factor.getClass.getSimpleName}")
       factor
     else
       factor match
         case Product(factors) => 
-          println(s"Processing Product with factors: ${factors.map(_.getClass.getSimpleName)}")
+          //println(s"Processing Product with factors: ${factors.map(_.getClass.getSimpleName)}")
           Product(factors.map(ITensor(r, _)))
         
         case ITensor(r2, factor) => 
-          println(s"Processing ITensor with r2=$r2, factor=${factor.getClass.getSimpleName}")
+          //println(s"Processing ITensor with r2=$r2, factor=${factor.getClass.getSimpleName}")
           val newR = r + r2
-          println(s"New r after addition: $newR")
+          //println(s"New r after addition: $newR")
           ITensor(newR, factor)
         
         case LinearPerm(matrices) => 
-          println(s"Processing LinearPerm with matrices of size: ${matrices.size}")
+          //println(s"Processing LinearPerm with matrices of size: ${matrices.size}")
           LinearPerm(matrices.map(m => Matrix.identity[F2](r) oplus m))
         
         case factor:Repeatable[T] => 
-          println(s"Processing Repeatable factor: ${factor.getClass.getSimpleName}")
+          //println(s"Processing Repeatable factor: ${factor.getClass.getSimpleName}")
           new ITensor(r, factor)
         
         case _ => 
-          println(s"Error: Non-repeatable SPL used in ITensor: ${factor.getClass.getSimpleName}")
+          //println(s"Error: Non-repeatable SPL used in ITensor: ${factor.getClass.getSimpleName}")
           throw new Exception("Non-repeatable SPL used in ITensor: " + factor)
 
 
