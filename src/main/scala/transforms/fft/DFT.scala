@@ -216,3 +216,4 @@ case class DFT(override val t: Int, override val k: Int) extends AcyclicStreamin
    * Returns the SPL representation of the DFT using the CTDFT function.
    */
   override def spl = DFT.CTDFT(t + k, 1)
+//explaination
