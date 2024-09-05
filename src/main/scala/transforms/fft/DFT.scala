@@ -115,8 +115,17 @@ object DFT:
   def omega(n: Int, pow: Int): Complex[Double] = {
     // Calculate the angle for the complex exponential
     val N = 1 << n  // Compute 2^n
-    val angle = -2 * Math.PI * pow / N
-    Complex(Math.cos(angle), Math.sin(angle))  // Return the complex exponential
+    if pow % (1 << n) == 0 then
+      Complex(1)
+    else if 2 * (pow % (1 << n)) == (1 << n) then
+      Complex(-1)
+    else if 4 * (pow % (1 << n)) == (1 << n) then
+      Complex(0,-1)
+    else if 4 * (pow % (1 << n)) == 3 * (1 << n) then
+      Complex(0,1)
+    else 
+      val angle = -2 * Math.PI * pow / N
+      Complex(Math.cos(angle), Math.sin(angle))  // Return the complex exponential
   }
 
   /**

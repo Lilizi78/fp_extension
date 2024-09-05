@@ -62,7 +62,7 @@ case class Butterfly[T: HW]() extends AcyclicStreamingModule[T](0, 1) {
  * @param k Logarithm of the input size (i.e., the streaming width).
  * @tparam T The data type for the input signals, parameterized with hardware type.
  */
-case class Butterfly4[T: HW](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
+case class Butterfly4[T: HW : ComplexOps](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
   override def toString: String = "F4"
 
   /**
@@ -86,7 +86,7 @@ case class Butterfly4[T: HW](override val k: Int) extends AcyclicStreamingModule
 
     // Process input groups based on calculated size
     paddedInputs.grouped(inputSize).toSeq.flatMap { i =>
-      println(s"Processing group: ${i.mkString(", ")}")
+      // Radix-4 butterfly computation
       val sum1 = i(0) + i(1)
       val sum2 = i(2) + i(3)
       val diff1 = i(0) - i(1)
@@ -97,8 +97,14 @@ case class Butterfly4[T: HW](override val k: Int) extends AcyclicStreamingModule
 
   /**
    * Returns the SPL representation of this module, which in this case is a DFT of size 4.
+   *
+   * @return An SPL representation for the DFT4 operation.
    */
-  override def spl: SPL[T] = DFT4[T]()(implicitly[HW[T]].num)
+  override def spl: SPL[T] = {
+    // Ensure we have an implicit ComplexOps instance
+    //implicit val ops: ComplexOps[T] = implicitly[ComplexOps[T]]
+    DFT4[T]()  // Create a DFT4 instance with the appropriate implicit parameter
+  }
 }
 
 /**
@@ -107,7 +113,7 @@ case class Butterfly4[T: HW](override val k: Int) extends AcyclicStreamingModule
  * @param k Logarithm of the input size (i.e., the streaming width).
  * @tparam T The data type for the input signals, parameterized with hardware type.
  */
-case class Butterfly8[T: HW](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
+case class Butterfly8[T: HW: ComplexOps](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
   override def toString: String = "F8"
 
   /**
@@ -131,38 +137,48 @@ case class Butterfly8[T: HW](override val k: Int) extends AcyclicStreamingModule
 
     // Process input groups of inputSize
     paddedInputs.grouped(inputSize).toSeq.flatMap { i =>
-      println(s"Processing group: ${i.mkString(", ")}")
-      
       // Perform butterfly computation on the group of inputSize
-      val sum1 = i(0) + i(4)
-      val sum2 = i(1) + i(5)
-      val sum3 = i(2) + i(6)
-      val sum4 = i(3) + i(7)
-      val diff1 = i(0) - i(4)
-      val diff2 = i(1) - i(5)
-      val diff3 = i(2) - i(6)
-      val diff4 = i(3) - i(7)
-      
+      val sum1 = i(0) + i(4)  // (x0 + x4)
+      val sum2 = i(1) + i(5)  // (x1 + x5)
+      val sum3 = i(2) + i(6)  // (x2 + x6)
+      val sum4 = i(3) + i(7)  // (x3 + x7)
+      val diff1 = i(0) - i(4) // (x0 - x4)
+      val diff2 = i(1) - i(5) // (x1 - x5)
+      val diff3 = i(2) - i(6) // (x2 - x6)
+      val diff4 = i(3) - i(7) // (x3 - x7)
+
+      // Generate outputs for the Radix-8 FFT butterfly
       Seq(
-        sum1 + sum2, sum3 + sum4, sum1 - sum2, sum3 - sum4,
-        diff1 + diff2, diff3 + diff4, diff1 - diff2, diff3 - diff4
+        sum1 + sum2,   // Output 1: (x0 + x4) + (x1 + x5)
+        sum3 + sum4,   // Output 2: (x2 + x6) + (x3 + x7)
+        sum1 - sum2,   // Output 3: (x0 + x4) - (x1 + x5)
+        sum3 - sum4,   // Output 4: (x2 + x6) - (x3 + x7)
+        diff1 + diff2, // Output 5: (x0 - x4) + (x1 - x5)
+        diff3 + diff4, // Output 6: (x2 - x6) + (x3 - x7)
+        diff1 - diff2, // Output 7: (x0 - x4) - (x1 - x5)
+        diff3 - diff4  // Output 8: (x2 - x6) - (x3 - x7)
       )
     }
   }
 
   /**
    * Returns the SPL representation of this module, which in this case is a DFT of size 8.
+   *
+   * @return An SPL representation for the DFT8 operation.
    */
-  override def spl: SPL[T] = DFT8[T]()(implicitly[HW[T]].num)
+    override def spl: SPL[T] = {
+    // Ensure we have an implicit ComplexOps instance
+    //implicit val ops: ComplexOps[T] = implicitly[ComplexOps[T]]
+    DFT8[T]()  // Create a DFT8 instance with the appropriate implicit parameter
+  }
 }
-
 /**
  * Butterfly class for Radix-16 FFT computation.
  *
  * @param k Logarithm of the input size (i.e., the streaming width).
  * @tparam T The data type for the input signals, parameterized with hardware type.
  */
-case class Butterfly16[T: HW](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
+case class Butterfly16[T: HW: ComplexOps](override val k: Int) extends AcyclicStreamingModule[T](0, k) {
   override def toString: String = "F16"
 
   /**
@@ -218,5 +234,5 @@ case class Butterfly16[T: HW](override val k: Int) extends AcyclicStreamingModul
   /**
    * Returns the SPL representation of this module, which in this case is a DFT of size 16.
    */
-  override def spl: SPL[T] = DFT16[T]()(implicitly[HW[T]].num)
+  override def spl: SPL[T] = DFT16[T]()
 }
