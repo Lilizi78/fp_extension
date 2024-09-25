@@ -32,7 +32,7 @@ import linalg.Fields._
  * @param hw HW bound of the components.
  * @tparam T Type of the software datatype of the component.
  */
-case class ComplexHW[T](hw: HW[T]) extends HW[Complex[T]](hw.size * 2) (using Complex.complexIsFractional[T](using hw.num)):
+case class ComplexHW[T](hw: HW[T]) extends HW[Complex[T]](hw.size * 2)(using Complex.complexIsFractional[T](using hw.num)):
   override def plus(lhs: Sig[Complex[T]], rhs: Sig[Complex[T]]): Sig[Complex[T]] = Cpx(Re(lhs) + Re(rhs), Im(lhs) + Im(rhs))
 
   override def minus(lhs: Sig[Complex[T]], rhs: Sig[Complex[T]]): Sig[Complex[T]] = Cpx(Re(lhs) - Re(rhs), Im(lhs) - Im(rhs))
@@ -44,4 +44,9 @@ case class ComplexHW[T](hw: HW[T]) extends HW[Complex[T]](hw.size * 2) (using Co
   override def valueOf(const: BigInt): Complex[T] = Complex(hw.valueOf(((BigInt(1) << hw.size) - 1) & const), hw.valueOf(const >> hw.size))(using hw.num)
 
   override def description: String = s"complex number in cartesian form (real and imaginary part are concatenated, each being a ${hw.description})"
+
+  // Corrected call to use the inner HW for constructing signals
+  def createComplexSignal(real: T, imag: T): Sig[Complex[T]] = {
+    Sig.fromComplexValues(real, imag)(using hw) // Pass the inner HW instance, not this
+  }
 

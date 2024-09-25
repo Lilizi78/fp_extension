@@ -36,9 +36,9 @@ case class LinearPerm[T](P: Seq[Matrix[F2]]) extends SPL[T](P.head.m):
   assert(P.forall(_.isInvertible))
   assert(P.forall(m => m.m == n))
 
-  override def eval(inputs: Seq[T], set: Int): Seq[T] = LinearPerm.permute(P(set % P.size), inputs) //inputs.grouped(N).toSeq.zipWithIndex.flatMap { case (inputs, s) => LinearPerm.permute(P(s % P.size), inputs) }
+  override def eval(inputs: Seq[T], set: Int): Seq[T] = LinearPerm.permute(P(set % P.size), inputs)
 
-  override def stream(k: Int, control:RAMControl)(implicit hw: HW[T]): StreamingModule[T] = 
+  override def stream(k: Int, control: RAMControl)(implicit hw: HW[T]): StreamingModule[T] = 
     def unblock(P: Matrix[F2], t: Int) = 
       assert(P.m == P.n)
       val k = P.m - t
@@ -62,9 +62,8 @@ case class LinearPerm[T](P: Seq[Matrix[F2]]) extends SPL[T](P.head.m):
       val C3 = p3
       val R2 = Vector.tabulate(P.size)(i => (p1(i) + L2(i) * p3(i)).inverse * (p2(i) + L2(i) * p4(i)))
 
-
       Spatial(L1, L2) *
-        Temporal(C3, C4,control) *
+        Temporal(C3, C4, control) *
         Spatial(Vector.fill(P.size)(Matrix.identity[F2](k)), R2)
     else 
       val L = new LUL((p1.head :: p2.head) / (p3.head :: p4.head), k, t).getSolution
@@ -72,15 +71,61 @@ case class LinearPerm[T](P: Seq[Matrix[F2]]) extends SPL[T](P.head.m):
       val R4 = p4.head + L * p2.head
       val C2 = p2.head * R4.inverse
       val C1 = p1.head + C2 * R3
-      Temporal(L, Matrix.identity[F2](t),control) *
+      Temporal(L, Matrix.identity[F2](t), control) *
         Spatial(C1, C2) *
-        Temporal(R3, R4,control)
+        Temporal(R3, R4, control)
 
 object LinearPerm:
   def apply[T](P: Matrix[F2]): SPL[T] = LinearPerm[T](Seq(P))
-  def permute[T](P: Matrix[F2], v: Seq[T]): Seq[T] = 
+
+  /**
+   * Validates that the matrix dimensions match the size of the input sequence.
+   *
+   * @param P The matrix being used for permutation.
+   * @param v The input sequence.
+   */
+  private def validateMatrixAndInput[T](P: Matrix[F2], v: Seq[T]): Unit = {
+    if (P.m != v.size) {
+      throw new IllegalArgumentException(
+        s"Matrix dimensions (${P.m}x${P.n}) do not match input size (${v.size})."
+      )
+    }
+  }
+
+  /**
+   * Performs permutation of the input sequence based on the given matrix P.
+   *
+   * @param P The permutation matrix.
+   * @param v The input sequence.
+   * @return A sequence of permuted inputs.
+   */
+  def permute[T](P: Matrix[F2], v: Seq[T]): Seq[T] = {
     val Pinv = P.inverse
-    Vector.tabulate(1 << P.m)(i => v(permute(Pinv, i)))
+    println(s"Matrix P dimensions: ${P.m}x${P.n}, Input size: ${v.size}")
+
+    // Validate matrix and input sizes
+    validateMatrixAndInput(P, v)
+
+    // Generate permuted indices
+    val permutedIndices = Vector.tabulate(v.size)(i => permute(Pinv, i))
+
+    // Check if generated indices are within the input sequence range
+    permutedIndices.map { index =>
+      if (index >= 0 && index < v.size) {
+        v(index)
+      } else {
+        println(s"Error: Index $index is out of bounds for input size ${v.size}")
+        println(s"Inverse Matrix: $Pinv")
+        println(s"Original Matrix P: $P")
+        println(s"Input sequence: $v")
+        
+        // Throw exception with context information
+        throw new IndexOutOfBoundsException(
+          s"Generated index $index is out of bounds for input sequence of size ${v.size}. Matrix P: ${P.m}x${P.n}."
+        )
+      }
+    }
+  }
 
   def permute(P: Matrix[F2], i: Int): Int = (P * Vec.fromInt(P.m, i)).toInt
 
@@ -90,4 +135,4 @@ object LinearPerm:
 
   def Cmat(n: Int): Matrix[F2] = Matrix.tabulate[F2](n, n)((i, j) => F2((i + 1) % n == j))
 
-  def stream[T](matrices: Seq[Matrix[F2]], k: Int, hw: HW[T], control:RAMControl): StreamingModule[T] = LinearPerm[T](matrices).stream(k,control)(hw)
+  def stream[T](matrices: Seq[Matrix[F2]], k: Int, hw: HW[T], control: RAMControl): StreamingModule[T] = LinearPerm[T](matrices).stream(k, control)(hw)

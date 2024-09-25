@@ -27,6 +27,7 @@ import transforms._
 import ir.rtl.{RAMControl, AcyclicStreamingModule, StreamingModule}
 import ir.rtl.hardwaretype._
 import transforms.fft.DFT
+import transforms.fft.Radix22
 import transforms.perm.LinearPerm
 import transforms.wht.WHT
 import ir.spl._
@@ -60,6 +61,9 @@ object Main:
     def r: Int = _r match
       case Some(r) => r
       case _ => (1 to k).reverse.filter(n % _ == 0).head
+
+    var _d: Option[Int] = None // 新增的分解参数，表示 Radix-2^k 的值
+    def d: Int = _d.getOrElse(1) // 默认为 1，即普通的 Radix-2
 
     var _hw: Option[HW[?]] = None
     def hw: HW[?] = _hw match
@@ -124,6 +128,7 @@ object Main:
       case "-n" => _n = Numeric[Int].parseString(argsQ.dequeue())
       case "-k" => _k = Numeric[Int].parseString(argsQ.dequeue())
       case "-r" => _r = Numeric[Int].parseString(argsQ.dequeue())
+      case "-d" => _d = Numeric[Int].parseString(argsQ.dequeue()) // 解析 -d 参数，用于指定分解级别
       case "-hw" => _hw = parseHW(argsQ)
       case "-o" => _filename = argsQ.removeHeadOption()
       case "-testbench" => testbench = true
@@ -150,7 +155,13 @@ object Main:
       case "wht" => _design = Some(WHT.stream(n, r, k, hw, control))
       case "whtcompact" => _design = Some(WHT.streamcompact(n, r, k, hw))
       case "dft" => hw match
-        case hw: ComplexHW[Double@unchecked] => _design = Some(DFT.CTDFT(n, r).stream(k, control)(using hw/*.asInstanceOf[ComplexHW[Double]]*/))
+        case hw: ComplexHW[Double@unchecked] =>
+          // 根据 -d 参数选择 FFT 分解模块
+          _design = Some(d match
+            case 2 => Radix22(n, r, k, decomp = true)(using hw).stream(k, control)(using hw) // Radix-2^2 分解
+            //case 3 => Radix23(n, r, k, decomp = true)(using hw).stream(k, control)(using hw) // Radix-2^3 分解
+            case _ => DFT.CTDFT(n, r).stream(k, control)(using hw) // 默认使用普通的 CTFFT
+          )
         case _ => throw new IllegalArgumentException("DFT requires a complex of fractional hardware datatype.")
       case "dftcompact" => hw match
         case hw: ComplexHW[Double@unchecked] => _design = Some(DFT.ItPeaseFused(n, r).stream(k, RAMControl.Dual)(using hw/*.asInstanceOf[ComplexHW[Double]]*/))

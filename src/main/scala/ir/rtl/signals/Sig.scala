@@ -45,25 +45,24 @@ abstract class Sig[T: HW]:
   /** Implementation of this signal (using RTL components)*/
   def implement(cp: (Sig[?], Int) => Component): Component
   /** Adds two signals*/
-  final def +(lhs: Sig[T]):Sig[T] = Plus(this, lhs)
+  final def +(lhs: Sig[T]): Sig[T] = Plus(this, lhs)
   /** Multiplies two signals*/
-  final def *(lhs: Sig[T]):Sig[T] = Times(this, lhs)
-  /** Substract two signals*/
-  final def -(lhs: Sig[T]):Sig[T] = Minus(this, lhs)
+  final def *(lhs: Sig[T]): Sig[T] = Times(this, lhs)
+  /** Subtract two signals*/
+  final def -(lhs: Sig[T]): Sig[T] = Minus(this, lhs)
   /** Hardware datatype (given as an instance of HW[T])*/
   final val hw = HW[T]
 
-  /** value for hashCode (hashCode cannot be simply overriden as a val). As signals are immutable, it is better to not have a recursive def for performance. */
+  /** value for hashCode (hashCode cannot be simply overridden as a val). As signals are immutable, it is better to not have a recursive def for performance. */
   val hash: Int
   final override inline def hashCode() = hash
-  
-  
 
 /** Companion object of Sig */
 object Sig:
   /** Conversion from vectors of bits to unsigned constants */
   given Conversion[Vec[F2], Const[Int]] = (v: Vec[F2]) => Const(v.toInt)(Unsigned(v.m))
-  /** Additionnal operations for unsigned signals */
+
+  /** Additional operations for unsigned signals */
   extension [T](lhs: Sig[Int])
     /** Concatenation  */
     def ::(rhs: Sig[Int]): Sig[Int] = Concat(lhs, rhs)
@@ -78,18 +77,27 @@ object Sig:
     /** Scalar product (in F2) */
     infix def scalar(rhs: Sig[Int]): Sig[Int] = (lhs & rhs).unary_^
     /** Ternary operator */
-    def ?(inputs: (Sig[T],Sig[T])): Sig[T] = Mux(lhs, Vector(inputs._2, inputs._1))
+    def ?(inputs: (Sig[T], Sig[T])): Sig[T] = Mux(lhs, Vector(inputs._2, inputs._1))
     /** Access a bit of the signal (tap) */
     def apply(i: Int): Sig[Int] = apply(i to i)
     /** Access a range of the bits of the signal (tap) */
     def apply(r: Range): Sig[Int] = Tap(lhs, r)
 
-  /** Additionnal operations for complex signals */
-  extension [T](lhs: Sig[Complex[T]])
+  /** Additional operations for complex signals */
+  extension [U](lhs: Sig[Complex[U]])
     /** Real part */
-    def re:Sig[T] = Re(lhs)
+    def re: Sig[U] = Re(lhs)
     /** Imaginary part */
-    def im:Sig[T] = Im(lhs)
+    def im: Sig[U] = Im(lhs)
+
+  // Modified method to generate a signal from real and imaginary parts for Complex types
+  def fromComplexValues[U: HW](real: U, imag: U): Sig[Complex[U]] = {
+    // 使用隐式的 HW[U]，不再重新定义给定的 HW[U]
+    val hw = implicitly[HW[U]]
+    val realSig = Const(real)(hw)  // Create signal for real part with provided HW context
+    val imagSig = Const(imag)(hw)  // Create signal for imaginary part with provided HW context
+    Cpx(realSig, imagSig)          // Combine into complex signal
+  }
 
 /** Signals without parent node */
 abstract class Source[T: HW] extends Sig[T]:
@@ -98,16 +106,15 @@ abstract class Source[T: HW] extends Sig[T]:
   final override val parents = Seq()
   final override def implement(cp: (Sig[?], Int) => Component): Component = implement
 
-/** Signals that, when implemented in RTL, expect parents that arrive at the same time*/
+/** Signals that, when implemented in RTL, expect parents that arrive at the same time */
 abstract class Operator[T: HW](operands: Sig[?]*) extends Sig[T]:
   /** Latency of the signal in cycles */
   def latency = 0
   /** Implementation of this signal (using RTL components)*/
   def implement(implicit cp: Sig[?] => Component): Component
-  final override def parents:Seq[(Sig[?],Int)] = operands.map((_, latency))
+  final override def parents: Seq[(Sig[?], Int)] = operands.map((_, latency))
   final override def implement(cp: (Sig[?], Int) => Component): Component = implement(sr => cp(sr, latency))
   final override val hash = Seq(this.getClass().getSimpleName, parents).hashCode()
 
-/** Signal that represent an associative operator */
+/** Signal that represents an associative operator */
 abstract class AssociativeSig[T](override val list: Seq[Sig[T]], val op: String)(using hw: HW[T] = list.head.hw) extends Operator(list: _*) with AssociativeNode[Sig[T]]
-

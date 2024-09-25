@@ -20,10 +20,7 @@
  * Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301  USA
  *   
  */
-
-
 package linalg.Fields
-
 
 import scala.language.implicitConversions
 import scala.math.Numeric.Implicits._
@@ -48,11 +45,10 @@ case class Complex[+T: Numeric](re: T, im: T):
 
   def norm2: T = re * re + im * im
 
-
 /**
  * Companion object of the class Complex
  */
-object Complex :
+object Complex:
   /**
    * Creates a new real complex
    *
@@ -62,7 +58,7 @@ object Complex :
   implicit def apply[T:Numeric](x: T): Complex[T] = Complex(x,implicitly[Numeric[T]].zero)
 
   /**
-   * Defines the operations oncomplex numbers
+   * Defines the operations on complex numbers
    */
   given complexIsFractional[T](using num: Numeric[T]): Fractional[Complex[T]] with
     import num._
@@ -94,6 +90,9 @@ object Complex :
     override def compare(x: Complex[T], y: Complex[T]): Int = ???
 
     override def div(x: Complex[T], y: Complex[T]): Complex[T] = ???
+
+
+
       /*val denom = y.re * y.re + y.im * y.im
       Complex((x.re * y.re + x.im * y.im) / denom, (x.im * y.re - x.re * y.im)/denom)*/
 
