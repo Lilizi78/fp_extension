@@ -70,7 +70,7 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
    * @return      The size of groups for the current stage.
    */
   private def determineGroupSize(stage: Int): Int = {
-    // For Radix-2^2 FFT, the group size should always be 2
+    // Radix-2^2 FFT has a group size of 2 for each stage due to its structure.
     2
   }
 
@@ -114,10 +114,10 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
   private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[Sig[T]] = {
     println(s"Stage $stage of $totalStages: Processing group with ${group.size} components")
 
-    // Step 1: Apply rotations if necessary
+    // Step 1: Apply trivial rotations
     val rotatedGroup = applyRotations(group, stage)
     println(s"Stage $stage: Rotated group size: ${rotatedGroup.size}")
-    
+
     // Step 2: Perform Butterfly operations
     val butterflyOutputs = Butterfly[T]().implement(rotatedGroup)
     println(s"Stage $stage: Butterfly outputs size: ${butterflyOutputs.size}")
@@ -130,9 +130,15 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
     // Step 4: Apply recursive FFT for further processing, pass the outputs to the next stage or return them
     if (stage < totalStages) {
       // Combine all butterfly outputs into the next stage expected size
-      val combinedOutputs = butterflyOutputs // No need to group, pass as is since each stage handles size 2
-      println(s"Stage $stage: Passing to next stage ${stage + 1}")
+      val combinedOutputs = butterflyOutputs.grouped(expectedSize(stage + 1)).toSeq.flatten
+      println(s"Stage $stage: Combining outputs into expected size ${expectedSize(stage + 1)} for the next stage")
 
+      // Check if combined size matches what is required for the next stage
+      if (combinedOutputs.size != expectedSize(stage + 1)) {
+        throw new IllegalArgumentException(s"Combined output size mismatch at stage $stage. Expected ${expectedSize(stage + 1)}, got ${combinedOutputs.size}.")
+      }
+
+      println(s"Stage $stage: Applying recursive FFT for further processing")
       applyCTDFT(combinedOutputs, stage + 1)
     } else {
       butterflyOutputs
@@ -140,12 +146,11 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
   }
 
   /**
-   * Applies necessary rotations to the group of input signals based on the current stage and index,
-   * computing appropriate twiddle factors.
+   * Applies trivial rotations to the group of input signals based on the current stage and index.
    *
    * @param group  The group of input signals to rotate.
    * @param stage  The current stage number of the FFT computation.
-   * @return       A sequence of rotated signals.
+   * @return       A sequence of rotated signals with only trivial factors applied.
    */
   private def applyRotations(group: Seq[Sig[T]], stage: Int): Seq[Sig[T]] = {
     group.zipWithIndex.map { case (signal, index) =>
@@ -158,7 +163,7 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
 
   /**
    * Computes the correct Twiddle Factor for the given stage and index.
-   * Adjusts for Decimation in Time (DIT) requirements, handling odd and even stages differently.
+   * Adjusts for Decimation in Time (DIT) requirements, handling trivial and non-trivial rotations.
    *
    * @param stage  The current stage number.
    * @param index  The index within the stage.
@@ -174,8 +179,10 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
     )
 
     if (stage % 2 != 0) {
+      // Handle trivial rotations at odd stages
       trivialRotations(index % 4)
     } else {
+      // Non-trivial rotations are handled in CTBF at the even stages
       DFT.omega(n, index)
     }
   }
@@ -212,6 +219,7 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
       throw new IllegalArgumentException("Mismatch in complex input size during FFT processing.")
     }
 
+    // Update expectedSize to align with Radix-2^2 FFT requirements
     val expectedSize = (currentN / Math.pow(4, stage - 1)).toInt
     if (complexInputs.size != expectedSize) {
       throw new IllegalArgumentException(s"Invalid input size at stage $stage. Expected $expectedSize, but got ${complexInputs.size}.")
