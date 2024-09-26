@@ -10,15 +10,28 @@ import linalg.Fields.Complex
 /**
  * Radix22 FFT implementation using Radix-2^2 decomposition.
  *
- * @param currentN   The total number of input points for the FFT.
- * @param r          The log2 of the radix used (e.g., for Radix-2, r=1; for Radix-4, r=2).
- * @param currentK   The streaming width of the FFT (number of parallel input streams).
- * @param decomp     Boolean flag to indicate if decomposition is used in the FFT.
+ * @param logN      The logarithm of the total number of input points for the FFT (currentN = 2^logN).
+ * @param logK      The logarithm of the streaming width of the FFT (currentK = 2^logK).
+ * @param r         The log2 of the radix used (currentR = 2^r).
+ * @param decomp    Boolean flag to indicate if decomposition is used in the FFT.
  */
-case class Radix22[T: HW](currentN: Int, r: Int, currentK: Int, decomp: Boolean)
-  extends AcyclicStreamingModule[T](currentN, currentK) {
+case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
+  extends AcyclicStreamingModule[T](Math.pow(2, logN).toInt, Math.pow(2, logK).toInt) {
 
-  override def toString: String = s"Radix22 FFT, n=$currentN, r=$r, k=$currentK, decomp=$decomp"
+  // Correctly calculate currentN, currentK, and currentR based on the input parameters.
+  private val currentN = Math.pow(2, logN).toInt
+  private val currentK = Math.pow(2, logK).toInt
+  private val currentR = Math.pow(2, r).toInt
+
+  // Calculate total stages based on the logarithm of currentN.
+  private val totalStages = logN
+
+  override def toString: String = s"Radix22 FFT, n=$logN, r=$r, k=$logK, decomp=$decomp"
+
+  // Function to compute the expected input size at each stage
+  private def expectedSize(stage: Int): Int = {
+    (currentN / Math.pow(4, stage - 1)).toInt
+  }
 
   /**
    * Main implementation function for Radix-2^2 FFT.
@@ -29,10 +42,7 @@ case class Radix22[T: HW](currentN: Int, r: Int, currentK: Int, decomp: Boolean)
    * @return        Sequence of processed signals after FFT computation.
    */
   override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
-    println(s"Implementing Radix-2^2 FFT: n=$currentN, r=$r, k=$currentK, decomp=$decomp")
-
-    // Calculate total stages based on log2(N)
-    val totalStages = (Math.log(currentN) / Math.log(2)).toInt
+    println(s"Implementing Radix-2^2 FFT: n=$logN, r=$r, k=$logK, decomp=$decomp")
 
     if (decomp) {
       val groupSize = determineGroupSize(stage = 1)
@@ -41,7 +51,6 @@ case class Radix22[T: HW](currentN: Int, r: Int, currentK: Int, decomp: Boolean)
 
       groupedInputs.zipWithIndex.flatMap { case (group, stage) =>
         println(s"Processing group: $group at stage ${stage + 1}")
-        // Pass totalStages to processGroup
         processGroup(group, stage + 1, totalStages)
       }
     } else {
@@ -61,8 +70,8 @@ case class Radix22[T: HW](currentN: Int, r: Int, currentK: Int, decomp: Boolean)
    * @return      The size of groups for the current stage.
    */
   private def determineGroupSize(stage: Int): Int = {
-    // Radix-2^2 FFT typically doubles group size each stage
-    Math.pow(2, stage).toInt
+    // For Radix-2^2 FFT, the group size should always be 2
+    2
   }
 
   /**
@@ -104,15 +113,27 @@ case class Radix22[T: HW](currentN: Int, r: Int, currentK: Int, decomp: Boolean)
    */
   private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[Sig[T]] = {
     println(s"Stage $stage of $totalStages: Processing group with ${group.size} components")
+
+    // Step 1: Apply rotations if necessary
     val rotatedGroup = applyRotations(group, stage)
     println(s"Stage $stage: Rotated group size: ${rotatedGroup.size}")
-
+    
+    // Step 2: Perform Butterfly operations
     val butterflyOutputs = Butterfly[T]().implement(rotatedGroup)
     println(s"Stage $stage: Butterfly outputs size: ${butterflyOutputs.size}")
 
+    // Step 3: Check Butterfly outputs to ensure they are correct
+    if (butterflyOutputs.size != group.size) {
+      throw new IllegalArgumentException(s"Incorrect Butterfly output size at stage $stage. Expected ${group.size}, got ${butterflyOutputs.size}.")
+    }
+
+    // Step 4: Apply recursive FFT for further processing, pass the outputs to the next stage or return them
     if (stage < totalStages) {
-      println(s"Stage $stage: Applying recursive FFT for further processing")
-      applyCTDFT(butterflyOutputs, stage + 1)
+      // Combine all butterfly outputs into the next stage expected size
+      val combinedOutputs = butterflyOutputs // No need to group, pass as is since each stage handles size 2
+      println(s"Stage $stage: Passing to next stage ${stage + 1}")
+
+      applyCTDFT(combinedOutputs, stage + 1)
     } else {
       butterflyOutputs
     }
@@ -191,7 +212,7 @@ case class Radix22[T: HW](currentN: Int, r: Int, currentK: Int, decomp: Boolean)
       throw new IllegalArgumentException("Mismatch in complex input size during FFT processing.")
     }
 
-    val expectedSize = currentN / Math.pow(4, stage - 1).toInt
+    val expectedSize = (currentN / Math.pow(4, stage - 1)).toInt
     if (complexInputs.size != expectedSize) {
       throw new IllegalArgumentException(s"Invalid input size at stage $stage. Expected $expectedSize, but got ${complexInputs.size}.")
     }
@@ -228,16 +249,20 @@ case class Radix22[T: HW](currentN: Int, r: Int, currentK: Int, decomp: Boolean)
     new AcyclicStreamingModule[T](currentN, currentK) {
       override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
         println(s"Streaming module implement called with ${inputs.size} components")
-        val groupedComponents = inputs.grouped(determineGroupSize(1)).toSeq
-        println(s"Grouped inputs into ${groupedComponents.size} groups of ${determineGroupSize(1)}")
 
+        // Dynamically determine group size based on stage
+        val groupSize = determineGroupSize(1)
+        val groupedComponents = inputs.grouped(groupSize).toSeq
+        println(s"Grouped inputs into ${groupedComponents.size} groups of $groupSize")
+
+        // Adjust processing based on stage and total stages logic
         groupedComponents.flatMap { group =>
-          processGroup(group, 1, totalStages = (Math.log(currentN) / Math.log(2)).toInt)
+          processGroup(group, 1, totalStages = logN)
         }
       }
 
-      override def toString: String = Radix22(currentN, r, currentK, decomp).toString
-      override def spl: SPL[T] = Radix22(currentN, r, currentK, decomp).spl
+      override def toString: String = Radix22(logN, logK, r, decomp).toString
+      override def spl: SPL[T] = Radix22(logN, logK, r, decomp).spl
     }
   }
 }

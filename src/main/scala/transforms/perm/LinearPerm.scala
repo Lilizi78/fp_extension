@@ -36,7 +36,8 @@ case class LinearPerm[T](P: Seq[Matrix[F2]]) extends SPL[T](P.head.m):
   assert(P.forall(_.isInvertible))
   assert(P.forall(m => m.m == n))
 
-  override def eval(inputs: Seq[T], set: Int): Seq[T] = LinearPerm.permute(P(set % P.size), inputs)
+  override def eval(inputs: Seq[T], set: Int): Seq[T] = LinearPerm.permute(P(set % P.size), inputs)//inputs.grouped(N).toSeq.zipWithIndex.flatMap { case (inputs, s) => LinearPerm.permute(P(s % P.size), inputs) }
+
 
   override def stream(k: Int, control: RAMControl)(implicit hw: HW[T]): StreamingModule[T] = 
     def unblock(P: Matrix[F2], t: Int) = 
@@ -99,33 +100,9 @@ object LinearPerm:
    * @param v The input sequence.
    * @return A sequence of permuted inputs.
    */
-  def permute[T](P: Matrix[F2], v: Seq[T]): Seq[T] = {
+  def permute[T](P: Matrix[F2], v: Seq[T]): Seq[T] = 
     val Pinv = P.inverse
-    println(s"Matrix P dimensions: ${P.m}x${P.n}, Input size: ${v.size}")
-
-    // Validate matrix and input sizes
-    validateMatrixAndInput(P, v)
-
-    // Generate permuted indices
-    val permutedIndices = Vector.tabulate(v.size)(i => permute(Pinv, i))
-
-    // Check if generated indices are within the input sequence range
-    permutedIndices.map { index =>
-      if (index >= 0 && index < v.size) {
-        v(index)
-      } else {
-        println(s"Error: Index $index is out of bounds for input size ${v.size}")
-        println(s"Inverse Matrix: $Pinv")
-        println(s"Original Matrix P: $P")
-        println(s"Input sequence: $v")
-        
-        // Throw exception with context information
-        throw new IndexOutOfBoundsException(
-          s"Generated index $index is out of bounds for input sequence of size ${v.size}. Matrix P: ${P.m}x${P.n}."
-        )
-      }
-    }
-  }
+    Vector.tabulate(1 << P.m)(i => v(permute(Pinv, i)))
 
   def permute(P: Matrix[F2], i: Int): Int = (P * Vec.fromInt(P.m, i)).toInt
 
