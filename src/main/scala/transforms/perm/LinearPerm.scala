@@ -80,20 +80,6 @@ object LinearPerm:
   def apply[T](P: Matrix[F2]): SPL[T] = LinearPerm[T](Seq(P))
 
   /**
-   * Validates that the matrix dimensions match the size of the input sequence.
-   *
-   * @param P The matrix being used for permutation.
-   * @param v The input sequence.
-   */
-  private def validateMatrixAndInput[T](P: Matrix[F2], v: Seq[T]): Unit = {
-    if (P.m != v.size) {
-      throw new IllegalArgumentException(
-        s"Matrix dimensions (${P.m}x${P.n}) do not match input size (${v.size})."
-      )
-    }
-  }
-
-  /**
    * Performs permutation of the input sequence based on the given matrix P.
    *
    * @param P The permutation matrix.
