@@ -31,29 +31,28 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
   override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
     println(s"Implementing Radix-2^2 FFT: n=$logN, r=$r, k=$logK, decomp=$decomp")
 
-    if (decomp) {
-      val groupSize = determineGroupSize(stage = 1)
-      val groupedInputs = inputs.grouped(groupSize).toSeq
-      println(s"Grouped inputs into ${groupedInputs.size} groups of $groupSize")
+    // 确定输入总组数
+    val groupSize = expectedSize(1)
+    val numGroups = inputs.size / groupSize // 计算总组数
+    
 
-      groupedInputs.zipWithIndex.flatMap { case (group, stage) =>
-        println(s"Processing group: $group at stage ${stage + 1}")
-        processGroup(group, stage + 1, totalStages)
-      }
-    } else {
-      val complexInputs = inputs.collect { case sig: Sig[Complex[Double]] => sig }
-      if (complexInputs.size != inputs.size)
-        throw new IllegalArgumentException("Expected all inputs to be of type Complex[Double]")
+    val groupedInputs = inputs.grouped(groupSize).toSeq
+    println(s"Grouped inputs into ${numGroups} groups of ${groupSize}")
 
-      println(s"Evaluating Cooley-Tukey FFT without decomposition")
-      DFT.CTDFT(currentN, r).eval(complexInputs.map(c => extractComplexValue(c)), set = 0).map(complexToSig)
+    groupedInputs.zipWithIndex.flatMap { case (group, stage) =>
+      println(s"Processing group: $group at stage ${stage + 1}")
+      processGroup(group, stage + 1, totalStages)
     }
   }
 
   /**
-   * Determines the correct grouping size for the inputs based on the current stage and radix settings.
+   * Expected size based on N and the stage number, no dependency on K.
    */
-  private def determineGroupSize(stage: Int): Int = currentN / Math.pow(2, stage).toInt
+  private def expectedSize(stage: Int): Int = {
+    val size = currentN / Math.pow(2, stage).toInt // 按照总点数递减，确保输入输出大小按FFT规范进行
+    println(s"Expected size at stage $stage: $size")
+    size
+  }
 
   private def fixedPointToDouble(fp: FixedPoint): Double = fp.valueOf(fp.bitsOf(1))
 
@@ -72,7 +71,7 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
    * Processes a group of signals at a given stage, applying rotations, butterfly computations,
    * and recursively calling the next stages of FFT as necessary.
    */
-  private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[Sig[T]] = {
+private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[Sig[T]] = {
     println(s"Stage $stage of $totalStages: Processing group with ${group.size} components")
 
     // Step 1: Apply rotations
@@ -93,9 +92,14 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
     println(s"Stage $stage: Buffered outputs processed for next stage")
 
     // Step 5: Dynamically calculate next stage size based on Radix-2^2 structure
-    val nextStageSize = (currentN / (4 * stage)).toInt
+    val nextStageSize = expectedSize(stage + 1)
     if (nextStageSize < 1) {
       throw new IllegalArgumentException(s"Invalid next stage size at stage $stage.")
+    }
+
+    // 确保每个阶段的输出大小与期望的输入大小匹配
+    if (bufferedOutputs.size != nextStageSize) {
+      throw new IllegalArgumentException(s"Invalid output size at stage $stage. Expected $nextStageSize, got ${bufferedOutputs.size}.")
     }
 
     // Step 6: Apply recursive FFT if necessary
@@ -114,22 +118,19 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
     }
   }
 
+
   /**
-  * Buffers and shuffles outputs based on the current stage to ensure correct data ordering.
-  */
+   * Buffers and shuffles outputs based on the current stage to ensure correct data ordering.
+   */
   private def bufferAndShuffle(outputs: Seq[Sig[T]], stage: Int): Seq[Sig[T]] = {
-    // Dynamically calculate the group size, which decreases as the stage increases.
-    val groupSize = determineGroupSize(stage)
+    val groupSize = expectedSize(stage) 
 
     // Split the current output data into two parts: top and bottom.
-    val (top, bottom) = outputs.splitAt(groupSize)
-
+    val (top, bottom) = outputs.splitAt(Math.min(groupSize, outputs.size))
     // Reorder the data based on whether the stage is even or odd.
     if (stage % 2 == 0) {
-      // For even stages: concatenate top part first, then the bottom part.
       top ++ bottom
     } else {
-      // For odd stages: concatenate bottom part first, then the top part.
       bottom ++ top
     }
   }
@@ -181,7 +182,8 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
       throw new IllegalArgumentException("Mismatch in complex input size during FFT processing.")
     }
 
-    val nextStageSize = determineGroupSize(stage + 1)
+    // Calculate the expected size for the next stage
+    val nextStageSize = expectedSize(stage + 1)
     if (complexInputs.size != nextStageSize) {
       throw new IllegalArgumentException(s"Invalid input size at stage $stage. Expected $nextStageSize, but got ${complexInputs.size}.")
     }
@@ -207,7 +209,7 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
 
         // Dynamically adjust group size based on current stage
         val stage = 1
-        val groupSize = determineGroupSize(stage)
+        val groupSize = expectedSize(stage)
         val groupedComponents = inputs.grouped(groupSize).toSeq
 
         println(s"Grouped inputs into ${groupedComponents.size} groups of $groupSize")

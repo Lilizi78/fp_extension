@@ -88,7 +88,7 @@ object LinearPerm:
    */
   def permute[T](P: Matrix[F2], v: Seq[T]): Seq[T] = 
     val Pinv = P.inverse
-    Vector.tabulate(1 << P.m)(i => v(permute(Pinv, i)))
+    Vector.tabulate(1 << P.m)(i =>  v(permute(Pinv, i)) )
 
   def permute(P: Matrix[F2], i: Int): Int = (P * Vec.fromInt(P.m, i)).toInt
 
