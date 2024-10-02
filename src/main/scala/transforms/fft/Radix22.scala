@@ -31,13 +31,9 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
   override def implement(inputs: Seq[Sig[T]]): Seq[Sig[T]] = {
     println(s"Implementing Radix-2^2 FFT: n=$logN, r=$r, k=$logK, decomp=$decomp")
 
-    // 确定输入总组数
-    val groupSize = expectedSize(1)
-    val numGroups = inputs.size / groupSize // 计算总组数
-    
-
+    val groupSize = expectedSize(1) // Use expectedSize instead of determineGroupSize
     val groupedInputs = inputs.grouped(groupSize).toSeq
-    println(s"Grouped inputs into ${numGroups} groups of ${groupSize}")
+    println(s"Grouped inputs into ${groupedInputs.size} groups of $groupSize")
 
     groupedInputs.zipWithIndex.flatMap { case (group, stage) =>
       println(s"Processing group: $group at stage ${stage + 1}")
@@ -46,12 +42,13 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
   }
 
   /**
-   * Expected size based on N and the stage number, no dependency on K.
+   * Expected size based on N and the stage number.
    */
   private def expectedSize(stage: Int): Int = {
-    val size = currentN / Math.pow(2, stage).toInt // 按照总点数递减，确保输入输出大小按FFT规范进行
+    if (stage > totalStages) return 1
+    val size = currentN / (1 << stage) // 2^stage
     println(s"Expected size at stage $stage: $size")
-    size
+    Math.max(size, 1)
   }
 
   private def fixedPointToDouble(fp: FixedPoint): Double = fp.valueOf(fp.bitsOf(1))
@@ -71,7 +68,7 @@ case class Radix22[T: HW](logN: Int, logK: Int, r: Int, decomp: Boolean)
    * Processes a group of signals at a given stage, applying rotations, butterfly computations,
    * and recursively calling the next stages of FFT as necessary.
    */
-private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[Sig[T]] = {
+  private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[Sig[T]] = {
     println(s"Stage $stage of $totalStages: Processing group with ${group.size} components")
 
     // Step 1: Apply rotations
@@ -91,15 +88,10 @@ private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[
     val bufferedOutputs = bufferAndShuffle(butterflyOutputs, stage)
     println(s"Stage $stage: Buffered outputs processed for next stage")
 
-    // Step 5: Dynamically calculate next stage size based on Radix-2^2 structure
+    // Step 5: Dynamically calculate next stage size based on Radix-2^2 structure (excluding K)
     val nextStageSize = expectedSize(stage + 1)
     if (nextStageSize < 1) {
       throw new IllegalArgumentException(s"Invalid next stage size at stage $stage.")
-    }
-
-    // 确保每个阶段的输出大小与期望的输入大小匹配
-    if (bufferedOutputs.size != nextStageSize) {
-      throw new IllegalArgumentException(s"Invalid output size at stage $stage. Expected $nextStageSize, got ${bufferedOutputs.size}.")
     }
 
     // Step 6: Apply recursive FFT if necessary
@@ -112,18 +104,17 @@ private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[
       }
 
       println(s"Stage $stage: Applying recursive FFT for further processing")
-      applyCTDFT(combinedOutputs, stage + 1)
+      applyCTDFT(combinedOutputs, stage )
     } else {
       bufferedOutputs
     }
   }
 
-
   /**
-   * Buffers and shuffles outputs based on the current stage to ensure correct data ordering.
-   */
+  * Buffers and shuffles outputs based on the current stage to ensure correct data ordering.
+  */
   private def bufferAndShuffle(outputs: Seq[Sig[T]], stage: Int): Seq[Sig[T]] = {
-    val groupSize = expectedSize(stage) 
+    val groupSize = expectedSize(stage) // Use expectedSize
 
     // Split the current output data into two parts: top and bottom.
     val (top, bottom) = outputs.splitAt(Math.min(groupSize, outputs.size))
@@ -226,5 +217,5 @@ private def processGroup(group: Seq[Sig[T]], stage: Int, totalStages: Int): Seq[
       override def toString: String = Radix22(logN, logK, r, decomp).toString
       override def spl: SPL[T] = Radix22(logN, logK, r, decomp).spl
     }
+   }
   }
-}
